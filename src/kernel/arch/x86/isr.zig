@@ -235,10 +235,12 @@ pub fn registerIsr(isr_num: u16, handler: IsrHandler) IsrError!void {
 ///
 pub fn init() void {
     log.logInfo("Init isr\n", .{});
+    syscall_handler = null;
 
     comptime var i = 0;
     inline while (i < 32) : (i += 1) {
         openIsr(i, interrupts.getInterruptStub(i));
+        isr_handlers[i] = null;
     }
 
     openIsr(syscalls.INTERRUPT, interrupts.getInterruptStub(syscalls.INTERRUPT));

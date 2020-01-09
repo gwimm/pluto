@@ -36,7 +36,10 @@ pub const InterruptContext = struct {
     ss: u32,
 };
 
+pub const VmmPayload = u8;
+pub const KERNEL_VMM_PAYLOAD = 0;
 pub const MEMORY_BLOCK_SIZE = paging.PAGE_SIZE_4KB;
+pub const VMM_MAPPER = undefined;
 
 pub fn outb(port: u16, data: u8) void {
     return mock_framework.performAction("outb", void, .{ port, data });

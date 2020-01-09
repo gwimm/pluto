@@ -36,15 +36,17 @@ def get_pre_archinit_cases():
             TestCase("Log warning tests", [r"Test WARNING level", r"Test WARNING level with args a, 1", r"Test WARNING function", r"Test WARNING function with args a, 1"], "\[WARNING\] "),
             TestCase("Log error tests", [r"Test ERROR level", r"Test ERROR level with args a, 1", r"Test ERROR function", r"Test ERROR function with args a, 1"], "\[ERROR\] "),
             TestCase("Mem init", [r"Init mem", r"Done"]),
+            TestCase("Panic init", [r"Init panic", r"Done"]),
             TestCase("PMM init", [r"Init pmm", r"Done"]),
             TestCase("PMM tests", [r"PMM: Tested allocation"]),
+            TestCase("VMM init", [r"Init vmm", r"Done"]),
+            TestCase("VMM tests", [r"VMM: Tested allocations"]),
             TestCase("Arch init starts", [r"Init arch \w+"])
         ]
 
 def get_post_archinit_cases():
     return [
             TestCase("Arch init finishes", [r"Arch init done"]),
-            TestCase("Panic init", [r"Init panic", r"Done"]),
             TestCase("VGA init", [r"Init vga", r"Done"]),
             TestCase("VGA tests", [r"VGA: Tested max scan line", r"VGA: Tested cursor shape", r"VGA: Tested updating cursor"]),
             TestCase("TTY init", [r"Init tty", r"Done"]),

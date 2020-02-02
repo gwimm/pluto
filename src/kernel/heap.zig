@@ -167,6 +167,7 @@ test "search" {
     std.testing.expectEqual(tree.left.?.*, left);
     std.testing.expectEqual(res, tree.left.?);
     std.testing.expectEqual(tree.right, null);
+    std.testing.expectEqual(addr, 0);
     tree.left.?.allocated = true;
     left.allocated = true;
 
@@ -178,6 +179,7 @@ test "search" {
     std.testing.expect(tree.right.?.left != null);
     std.testing.expectEqual(tree.right.?.left.?.*, right_left);
     std.testing.expectEqual(res, tree.right.?.left.?);
+    std.testing.expectEqual(addr, block_max / 2);
     // The left child shouldn't have been modified
     std.testing.expect(tree.left != null);
     std.testing.expectEqual(tree.left.?.*, left);
@@ -192,6 +194,7 @@ test "search" {
     std.testing.expect(tree.right.?.right != null);
     std.testing.expectEqual(tree.right.?.right.?.*, right_right);
     std.testing.expectEqual(res, tree.right.?.right.?);
+    std.testing.expectEqual(addr, block_max / 2 + block_max / 4);
     // The left child of the root's right child shouldn't have changed
     std.testing.expect(tree.right.?.left != null);
     std.testing.expectEqual(tree.right.?.left.?.*, right_left);

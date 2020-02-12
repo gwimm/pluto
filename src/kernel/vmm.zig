@@ -243,41 +243,31 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///     std.mem.AllocatorError.OutOfMemory: The required amount of memory couldn't be allocated
         ///
         pub fn alloc(self: *Self, num: u32, attrs: Attributes) std.mem.Allocator.Error!?usize {
+            if (num == 0)
+                return null;
             // Ensure that there is both enough physical and virtual address space free
             if (pmm.blocksFree() >= num and self.bmp.num_free_entries >= num) {
-                var block_list = std.ArrayList(usize).init(self.allocator);
-                try block_list.ensureCapacity(num);
-
-                var i: u32 = 0;
-                var first_addr: ?usize = null;
-                while (i < num) : (i += 1) {
-                    // addr cannot be null since the pmm has enough free entries
-                    const addr = pmm.alloc() orelse unreachable;
-                    if (i == 0)
-                        first_addr = addr;
-                    try block_list.append(addr);
-                }
-
                 // The virtual address space must be contiguous
                 if (self.bmp.setContiguous(num)) |entry| {
+                    var block_list = std.ArrayList(usize).init(self.allocator);
+                    defer block_list.deinit();
+                    try block_list.ensureCapacity(num);
+
+                    var i: u32 = 0;
+                    var first_addr: ?usize = null;
                     const vaddr_start = entry * BLOCK_SIZE;
                     var vaddr = vaddr_start;
                     // Map the blocks to physical memory
-                    for (block_list.toSlice()) |addr| {
+                    while (i < num) : (i += 1) {
+                        const addr = pmm.alloc() orelse unreachable;
+                        if (i == 0)
+                            first_addr = addr;
+                        try block_list.append(addr);
                         self.mapper.mapFn(vaddr, vaddr + BLOCK_SIZE, addr, addr + BLOCK_SIZE, attrs, self.allocator, self.payload);
                         vaddr += BLOCK_SIZE;
                     }
                     _ = try self.allocations.put(vaddr_start, Allocation{ .physical = block_list });
-                    block_list.deinit();
                     return first_addr;
-                } else {
-                    // If the virtual address allocation failed, free the physical blocks
-                    for (block_list.toSlice()) |addr| {
-                        // Cannot be out of bounds or unallocated as it was allocated earlier in this function
-                        pmm.free(addr) catch unreachable;
-                    }
-                    block_list.deinit();
-                    return null;
                 }
             }
             return null;

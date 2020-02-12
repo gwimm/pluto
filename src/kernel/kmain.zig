@@ -24,6 +24,7 @@ comptime {
     }
 }
 
+/// The virtual memory manager associated with the kernel address space
 var kernel_vmm: vmm.VirtualMemoryManager(arch.VmmPayload) = undefined;
 
 // This is for unit testing as we need to export KERNEL_ADDR_OFFSET as it is no longer available

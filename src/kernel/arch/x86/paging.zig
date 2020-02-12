@@ -122,6 +122,7 @@ pub const PAGE_SIZE_4MB: u32 = 0x400000;
 /// The number of bytes in 4KB
 pub const PAGE_SIZE_4KB: u32 = PAGE_SIZE_4MB / 1024;
 
+/// The kernel's page directory. Should only be used to map kernel-owned code and data
 pub var kernel_directory: Directory align(@truncate(u29, PAGE_SIZE_4KB)) = Directory{ .entries = [_]DirectoryEntry{0} ** ENTRIES_PER_DIRECTORY, .tables = [_]?*Table{null} ** ENTRIES_PER_DIRECTORY };
 
 ///
@@ -160,6 +161,7 @@ inline fn virtToTableEntryIdx(virt: usize) usize {
 ///     IN virt_end: usize - The end of the virtual space to map
 ///     IN phys_addr: usize - The start of the physical space to map
 ///     IN phys_end: usize - The end of the physical space to map
+///     IN attrs: vmm.Attributes - The attributes to apply to this mapping
 ///     IN allocator: *Allocator - The allocator to use to map any tables needed
 ///
 /// Error: PagingError || std.mem.Allocator.Error
@@ -274,9 +276,10 @@ fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize) PagingError!void
 ///     IN virt_end: usize - The virtual address at which to stop mapping
 ///     IN phys_start: usize - The physical address at which to start mapping
 ///     IN phys_end: usize - The physical address at which to stop mapping
+///     IN attrs: vmm.Attributes - The attributes to apply to this mapping
 ///     IN allocator: *Allocator - The allocator to use to map any tables needed
 ///
-/// Error: std.mem.allocator.Error || PagingError
+/// Error: std.mem.Allocator.Error || PagingError
 ///     * - See mapDirEntry.
 ///
 fn mapDir(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator) (std.mem.Allocator.Error || PagingError)!void {
@@ -303,9 +306,34 @@ fn pageFault(state: *arch.InterruptContext) void {
     @panic("Page fault");
 }
 
+///
+/// Map a virtual region of memory to a physical region with a set of attributes within a directory.
+/// If this call is made to a directory that has been loaded by the CPU, the virtual memory will immediately be accessible (given the proper attributes)
+/// and will be mirrored to the physical region given. Otherwise it will be accessible once the given directory is loaded by the CPU.
+///
+/// This call will panic if mapDir returns an error when called with any of the arguments given.
+///
+/// Arguments:
+///     IN virtual_start: usize - The start of the virtual region to map
+///     IN virtual_end: usize - The end (exclusive) of the virtual region to map
+///     IN physical_start: usize - The start of the physical region to mape to
+///     IN physical_end: usize - The end (exclusive) of the physical region to map to
+///     IN attrs: vmm.Attributes - The attributes to apply to this mapping
+///     INOUT allocator: *std.mem.Allocator - The allocator to use to allocate any intermediate data structures required to map this region
+///     INOUT dir: *Directory - The page directory to map within
+///
 pub fn map(virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator, dir: *Directory) void {
     mapDir(dir, virtual_start, virtual_end, physical_start, physical_end, attrs, allocator) catch |e| panic(@errorReturnTrace(), "Failed to map virtual {x} -> {x} to physical {x} -> {x}: {}", .{ virtual_start, virtual_end, physical_start, physical_end, e });
 }
+
+///
+/// Unmap a virtual region of memory within a directory so that it is no longer accesible.
+///
+/// Arguments:
+///     IN virtual_start: usize - The start of the virtual region to unmap
+///     IN virtual_end: usize - The end (exclusive) of the virtual region to unmap
+///     INOUT dir: *Directory - The page directory to unmap within
+///
 pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) void {
     // TODO: Implement
 }

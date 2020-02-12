@@ -29,6 +29,9 @@ const Allocation = struct {
     physical: std.ArrayList(usize),
 };
 
+/// The size of each allocatable block, the same as the physical memory manager's block size
+pub const BLOCK_SIZE: u32 = pmm.BLOCK_SIZE;
+
 ///
 /// Returns a container that can map and unmap virtual memory to physical memory.
 /// The mapper can pass some payload data when mapping an unmapping, which is of type `Payload`. This can be anything that the underlying mapper needs to carry out the mapping process.
@@ -118,6 +121,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         /// The mapper to use when allocating and freeing regions
         mapper: Mapper(Payload),
 
+        /// The payload to pass to the mapper functions
         payload: Payload,
 
         const Self = @This();
@@ -307,9 +311,6 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         }
     };
 }
-
-/// The size of each allocatable block, the same as the physical memory manager's block size
-pub const BLOCK_SIZE = pmm.BLOCK_SIZE;
 
 ///
 /// Initialise the main system virtual memory manager covering 4GB. Maps in the kernel code, TTY, multiboot info and boot modules

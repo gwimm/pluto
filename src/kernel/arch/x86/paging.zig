@@ -327,7 +327,7 @@ pub fn map(virtual_start: usize, virtual_end: usize, physical_start: usize, phys
 }
 
 ///
-/// Unmap a virtual region of memory within a directory so that it is no longer accesible.
+/// Unmap a virtual region of memory within a directory so that it is no longer accessible.
 ///
 /// Arguments:
 ///     IN virtual_start: usize - The start of the virtual region to unmap

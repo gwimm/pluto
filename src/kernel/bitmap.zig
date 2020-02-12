@@ -105,7 +105,7 @@ pub fn Bitmap(comptime BitmapType: type) type {
         /// Convert a global bitmap index into the bit corresponding to an entry within a single BitmapType.
         ///
         /// Arguments:
-        ///     IN self: *Self - The bitmap to use.
+        ///     IN self: *const Self - The bitmap to use.
         ///     IN idx: u32 - The index into all of the bitmap's entries.
         ///
         /// Return: BitmapType.
@@ -206,7 +206,7 @@ pub fn Bitmap(comptime BitmapType: type) type {
         /// Check if an entry is set.
         ///
         /// Arguments:
-        ///     IN self: *Bitmap - The bitmap to check.
+        ///     IN self: *const Self - The bitmap to check.
         ///     IN idx: u32 - The entry to check.
         ///
         /// Return: bool.

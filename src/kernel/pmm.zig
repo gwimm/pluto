@@ -130,11 +130,13 @@ pub fn init(mem: *const MemProfile, allocator: *std.mem.Allocator) void {
 ///
 /// Arguments:
 ///     IN mem: *const MemProfile - The memory profile to check for reserved memory regions.
+///     INOUT allocator: *std.mem.Allocator - The allocator to use when needing to create intermediate structures used for testing
 ///
 fn runtimeTests(mem: *const MemProfile, allocator: *std.mem.Allocator) void {
     // Make sure that occupied memory can't be allocated
     var prev_alloc: usize = std.math.maxInt(usize);
-    var alloc_list = std.ArrayList(usize).init(allocator); // catch |e| panic(@errorReturnTrace(), "Failed to initialise allocation list in PMM rt test: {}", .{e});
+    var alloc_list = std.ArrayList(usize).init(allocator);
+    defer alloc_list.deinit();
     while (alloc()) |alloced| {
         if (prev_alloc == alloced) {
             panic(null, "PMM allocated the same address twice: 0x{x}", .{alloced});
@@ -154,7 +156,6 @@ fn runtimeTests(mem: *const MemProfile, allocator: *std.mem.Allocator) void {
     for (alloc_list.toSlice()) |alloced| {
         free(alloced) catch |e| panic(@errorReturnTrace(), "Failed freeing allocation in PMM rt test: {}", .{e});
     }
-    alloc_list.deinit();
     log.logInfo("PMM: Tested allocation\n", .{});
 }
 

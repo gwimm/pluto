@@ -35,7 +35,7 @@ pub fn init(mb_info: *multiboot.multiboot_info_t) MemProfile {
     };
 }
 
-pub inline fn virtToPhys(virt: var) @TypeOf(virt) {
+pub fn virtToPhys(virt: var) @TypeOf(virt) {
     const T = @TypeOf(virt);
     return switch (@typeId(T)) {
         .Pointer => @intToPtr(T, @ptrToInt(virt) - KERNEL_ADDR_OFFSET),
@@ -44,7 +44,7 @@ pub inline fn virtToPhys(virt: var) @TypeOf(virt) {
     };
 }
 
-pub inline fn physToVirt(phys: var) @TypeOf(phys) {
+pub fn physToVirt(phys: var) @TypeOf(phys) {
     const T = @TypeOf(phys);
     return switch (@typeId(T)) {
         .Pointer => @intToPtr(T, @ptrToInt(phys) + KERNEL_ADDR_OFFSET),

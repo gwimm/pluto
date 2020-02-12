@@ -35,6 +35,7 @@ pub const BLOCK_SIZE: u32 = pmm.BLOCK_SIZE;
 ///
 /// Returns a container that can map and unmap virtual memory to physical memory.
 /// The mapper can pass some payload data when mapping an unmapping, which is of type `Payload`. This can be anything that the underlying mapper needs to carry out the mapping process.
+/// For x86, it would be the page directory that is being mapped within. An architecture or other mapper can specify the data it needs when mapping by specifying this type.
 ///
 /// Arguments:
 ///     IN comptime Payload: type - The type of the VMM-specific payload to pass when mapping and unmapping

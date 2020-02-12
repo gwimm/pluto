@@ -88,7 +88,7 @@ pub fn free(addr: usize) (PmmBitmap.BitmapError || PmmError)!void {
 /// Return: u32.
 ///     The number of unallocated blocks of memory
 ///
-pub fn numFree() u32 {
+pub fn blocksFree() u32 {
     return bitmap.num_free_entries;
 }
 
@@ -170,7 +170,7 @@ test "alloc" {
         testing.expect(!(try isSet(addr)));
         testing.expect(alloc().? == addr);
         testing.expect(try isSet(addr));
-        testing.expectEqual(numFree(), 31 - i);
+        testing.expectEqual(blocksFree(), 31 - i);
     }
     // Allocation should now fail
     testing.expect(alloc() == null);
@@ -183,9 +183,9 @@ test "free" {
     inline while (i < 32) : (i += 1) {
         const addr = alloc().?;
         testing.expect(try isSet(addr));
-        testing.expectEqual(numFree(), 31);
+        testing.expectEqual(blocksFree(), 31);
         try free(addr);
-        testing.expectEqual(numFree(), 32);
+        testing.expectEqual(blocksFree(), 32);
         testing.expect(!(try isSet(addr)));
         // Double frees should be caught
         testing.expectError(PmmError.NotAllocated, free(addr));
@@ -211,11 +211,11 @@ test "setAddr and isSet" {
             testing.expect(try isSet(addr2));
         }
 
-        testing.expectEqual(numFree(), num_entries - i);
+        testing.expectEqual(blocksFree(), num_entries - i);
         // Set the current block
         try setAddr(addr);
         testing.expect(try isSet(addr));
-        testing.expectEqual(numFree(), num_entries - i - 1);
+        testing.expectEqual(blocksFree(), num_entries - i - 1);
 
         // Ensure all successive entries are not set
         var j: u32 = i + 1;

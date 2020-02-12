@@ -239,7 +239,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///
         pub fn alloc(self: *Self, num: u32, attrs: Attributes) std.mem.Allocator.Error!?usize {
             // Ensure that there is both enough physical and virtual address space free
-            if (pmm.numFree() >= num and self.bmp.num_free_entries >= num) {
+            if (pmm.blocksFree() >= num and self.bmp.num_free_entries >= num) {
                 var block_list = std.ArrayList(usize).init(self.allocator);
                 try block_list.ensureCapacity(num);
 

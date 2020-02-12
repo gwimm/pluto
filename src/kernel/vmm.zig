@@ -340,7 +340,7 @@ pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_in
     const v_end = std.mem.alignForward(@ptrToInt(mem_profile.vaddr_end) + mem_profile.fixed_alloc_size, BLOCK_SIZE);
     const p_start = std.mem.alignBackward(@ptrToInt(mem_profile.physaddr_start), BLOCK_SIZE);
     const p_end = std.mem.alignForward(@ptrToInt(mem_profile.physaddr_end) + mem_profile.fixed_alloc_size, BLOCK_SIZE);
-    vmm.set(v_start, v_end, p_start, p_end, .{ .kernel = true, .writable = true, .cachable = true }) catch |e| panic(@errorReturnTrace(), "Failed mapping kernel code in VMM: {}", .{e});
+    vmm.set(v_start, v_end, p_start, p_end, .{ .kernel = true, .writable = false, .cachable = true }) catch |e| panic(@errorReturnTrace(), "Failed mapping kernel code in VMM: {}", .{e});
 
     // Map in tty
     const tty_addr = tty.getVideoBufferAddress();

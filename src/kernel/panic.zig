@@ -116,7 +116,7 @@ pub fn panic(trace: ?*builtin.StackTrace, comptime format: []const u8, args: var
     } else {
         const first_ret_addr = @returnAddress();
         var last_addr: u64 = 0;
-        var it = std.debug.StackIterator.init(first_ret_addr);
+        var it = std.debug.StackIterator.init(first_ret_addr, null);
         while (it.next()) |ret_addr| {
             if (ret_addr != last_addr) logTraceAddress(ret_addr);
             last_addr = ret_addr;

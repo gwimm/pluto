@@ -342,7 +342,7 @@ pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_in
     // Map in the multiboot info struct
     const mb_info_addr = std.mem.alignBackward(@ptrToInt(mb_info), BLOCK_SIZE);
     const mb_info_end = std.mem.alignForward(mb_info_addr + @sizeOf(multiboot.multiboot_info_t), BLOCK_SIZE);
-    vmm.set(mb_info_addr, mb_info_end, mem.virtToPhys(mb_info_addr), mem.virtToPhys(mb_info_end), .{ .kernel = true, .writable = true, .cachable = true }) catch |e| panic(@errorReturnTrace(), "Failed mapping multiboot info in VMM: {}", .{e});
+    vmm.set(mb_info_addr, mb_info_end, mem.virtToPhys(mb_info_addr), mem.virtToPhys(mb_info_end), .{ .kernel = true, .writable = false, .cachable = true }) catch |e| panic(@errorReturnTrace(), "Failed mapping multiboot info in VMM: {}", .{e});
 
     // Map in each boot module
     for (mem_profile.boot_modules) |*module| {

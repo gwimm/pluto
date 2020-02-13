@@ -449,7 +449,19 @@ test "set" {
 var test_allocations: ?bitmap.Bitmap(u64) = null;
 var test_mapper = Mapper(u8){ .mapFn = testMap, .unmapFn = testUnmap };
 
-fn testInit(num_entries: u32) !VirtualMemoryManager(u8) {
+///
+/// Initialise a virtual memory manager used for testing
+///
+/// Arguments:
+///     IN num_entries: u32 - The number of entries the VMM should track
+///
+/// Return: VirtualMemoryManager(u8)
+///     The VMM constructed
+///
+/// Error: std.mem.Allocator.Error
+///     OutOfMemory: The allocator couldn't allocate the structures needed
+///
+fn testInit(num_entries: u32) std.mem.Allocator.Error!VirtualMemoryManager(u8) {
     if (test_allocations == null) {
         test_allocations = try bitmap.Bitmap(u64).init(num_entries, std.heap.direct_allocator);
     } else |allocations| {

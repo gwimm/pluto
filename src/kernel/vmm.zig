@@ -464,6 +464,18 @@ fn testInit(num_entries: u32) !VirtualMemoryManager(u8) {
     return try VirtualMemoryManager(u8).init(0, num_entries * BLOCK_SIZE, std.heap.direct_allocator, test_mapper, 39);
 }
 
+///
+/// A mapping function used when doing unit tests
+///
+/// Arguments:
+///     IN vstart: usize - The start of the virtual region to map
+///     IN vend: usize - The end of the virtual region to map
+///     IN pstart: usize - The start of the physical region to map
+///     IN pend: usize - The end of the physical region to map
+///     IN attrs: Attributes - The attributes to map with
+///     INOUT allocator: *std.mem.Allocator - The allocator to use. Ignored
+///     IN payload: u8 - The payload value. Expected to be 39
+///
 fn testMap(vstart: usize, vend: usize, pstart: usize, pend: usize, attrs: Attributes, allocator: *std.mem.Allocator, payload: u8) void {
     std.testing.expectEqual(@as(u8, 39), payload);
     var vaddr = vstart;
@@ -472,6 +484,14 @@ fn testMap(vstart: usize, vend: usize, pstart: usize, pend: usize, attrs: Attrib
     }
 }
 
+///
+/// An unmapping function used when doing unit tests
+///
+/// Arguments:
+///     IN vstart: usize - The start of the virtual region to unmap
+///     IN vend: usize - The end of the virtual region to unmap
+///     IN payload: u8 - The payload value. Expected to be 39
+///
 fn testUnmap(vstart: usize, vend: usize, payload: u8) void {
     std.testing.expectEqual(@as(u8, 39), payload);
     var vaddr = vstart;
@@ -480,6 +500,15 @@ fn testUnmap(vstart: usize, vend: usize, payload: u8) void {
     }
 }
 
+///
+/// Run the runtime tests.
+///
+/// Arguments:
+///     IN comptime Payload: type - The type of the payload passed to the mapper
+///     IN vmm: VirtualMemoryManager(Payload) - The virtual memory manager to test
+///     IN mem_profile: *const mem.MemProfile - The mem profile with details about all the memory regions that should be reserved
+///     IN mb_info: *multiboot.multiboot_info_t - The multiboot info struct that should also be reserved
+///
 fn runtimeTests(comptime Payload: type, vmm: VirtualMemoryManager(Payload), mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_info_t) void {
     const v_start = std.mem.alignBackward(@ptrToInt(mem_profile.vaddr_start), BLOCK_SIZE);
     const v_end = std.mem.alignForward(@ptrToInt(mem_profile.vaddr_end) + mem_profile.fixed_alloc_size, BLOCK_SIZE);

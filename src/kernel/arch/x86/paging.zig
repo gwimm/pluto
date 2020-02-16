@@ -152,6 +152,28 @@ inline fn virtToTableEntryIdx(virt: usize) usize {
 }
 
 ///
+/// Set the bit(s) associated with an attribute of a table or directory entry.
+///
+/// Arguments:
+///     val: *align(1) u32 - The entry to modify
+///     attr: u32 - The bits corresponding to the atttribute to set
+///
+inline fn setAttribute(val: *align(1) u32, attr: u32) void {
+    val.* |= attr;
+}
+
+///
+/// Clear the bit(s) associated with an attribute of a table or directory entry.
+///
+/// Arguments:
+///     val: *align(1) u32 - The entry to modify
+///     attr: u32 - The bits corresponding to the atttribute to clear
+///
+inline fn clearAttribute(val: *align(1) u32, attr: u32) void {
+    val.* &= ~attr;
+}
+
+///
 /// Map a page directory entry, setting the present, size, writable, write-through and physical address bits.
 /// Clears the user and cache disabled bits. Entry should be zero'ed.
 ///
@@ -194,26 +216,26 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
         return PagingError.InvalidVirtAddresses;
     var dir_entry = &dir.entries[entry];
 
-    dir_entry.* |= DENTRY_PRESENT;
-    dir_entry.* |= DENTRY_WRITE_THROUGH;
-    dir_entry.* &= ~DENTRY_4MB_PAGES;
+    setAttribute(dir_entry, DENTRY_PRESENT);
+    setAttribute(dir_entry, DENTRY_WRITE_THROUGH);
+    clearAttribute(dir_entry, DENTRY_4MB_PAGES);
 
     if (attrs.writable) {
-        dir_entry.* |= DENTRY_WRITABLE;
+        setAttribute(dir_entry, DENTRY_WRITABLE);
     } else {
-        dir_entry.* &= ~DENTRY_WRITABLE;
+        clearAttribute(dir_entry, DENTRY_WRITABLE);
     }
 
     if (attrs.kernel) {
-        dir_entry.* &= ~DENTRY_USER;
+        clearAttribute(dir_entry, DENTRY_USER);
     } else {
-        dir_entry.* |= DENTRY_USER;
+        setAttribute(dir_entry, DENTRY_USER);
     }
 
     if (attrs.cachable) {
-        dir_entry.* &= ~DENTRY_CACHE_DISABLED;
+        clearAttribute(dir_entry, DENTRY_CACHE_DISABLED);
     } else {
-        dir_entry.* |= DENTRY_CACHE_DISABLED;
+        setAttribute(dir_entry, DENTRY_CACHE_DISABLED);
     }
 
     // Only create a new table if one hasn't already been created for this dir entry.
@@ -392,6 +414,23 @@ fn checkTableEntry(entry: TableEntry, page_phys: usize, attrs: vmm.Attributes) v
     expectEqual(entry & TENTRY_ZERO, 0);
     expectEqual(entry & TENTRY_GLOBAL, 0);
     expectEqual(entry & TENTRY_PAGE_ADDR, page_phys);
+}
+
+test "setAttribute and clearAttribute" {
+    var val: u32 = 0;
+    const attrs = [_]u32{ DENTRY_PRESENT, DENTRY_WRITABLE, DENTRY_USER, DENTRY_WRITE_THROUGH, DENTRY_CACHE_DISABLED, DENTRY_ACCESSED, DENTRY_ZERO, DENTRY_4MB_PAGES, DENTRY_IGNORED, DENTRY_AVAILABLE, DENTRY_PAGE_ADDR };
+
+    for (attrs) |attr| {
+        const old_val = val;
+        setAttribute(&val, attr);
+        std.testing.expectEqual(val, old_val | attr);
+    }
+
+    for (attrs) |attr| {
+        const old_val = val;
+        clearAttribute(&val, attr);
+        std.testing.expectEqual(val, old_val & ~attr);
+    }
 }
 
 test "virtToDirEntryIdx" {

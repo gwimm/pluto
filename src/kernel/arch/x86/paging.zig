@@ -334,7 +334,7 @@ pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) (std.mem
         entry_idx += 1;
     }) {
         var dir_entry = &dir.entries[entry_idx];
-        const table = dir.tables[entry_idx] orelse return vmm.MapperError.Unmapped;
+        const table = dir.tables[entry_idx] orelse return vmm.MapperError.NotMapped;
         const end = std.math.min(virtual_end, virt_addr + PAGE_SIZE_4MB);
         var addr = virt_addr;
         while (addr < end) : (addr += PAGE_SIZE_4KB) {
@@ -342,7 +342,7 @@ pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) (std.mem
             if (table_entry.* & TENTRY_PRESENT != 0) {
                 clearAttribute(table_entry, TENTRY_PRESENT);
             } else {
-                return vmm.MapperError.Unmapped;
+                return vmm.MapperError.NotMapped;
             }
         }
         // If the region to be mapped covers all of this directory entry, set the whole thing as not present

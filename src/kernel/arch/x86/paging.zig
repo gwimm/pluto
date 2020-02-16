@@ -303,6 +303,9 @@ fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize, attrs: vmm.Attri
 ///     INOUT allocator: *std.mem.Allocator - The allocator to use to allocate any intermediate data structures required to map this region
 ///     INOUT dir: *Directory - The page directory to map within
 ///
+/// Error: vmm.MapperError || std.mem.Allocator.Error
+///     * - See mapDirEntry
+///
 pub fn map(virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator, dir: *Directory) (std.mem.Allocator.Error || vmm.MapperError)!void {
     var virt_addr = virt_start;
     var phys_addr = phys_start;
@@ -324,6 +327,9 @@ pub fn map(virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usiz
 ///     IN virtual_start: usize - The start of the virtual region to unmap
 ///     IN virtual_end: usize - The end (exclusive) of the virtual region to unmap
 ///     INOUT dir: *Directory - The page directory to unmap within
+///
+/// Error: std.mem.Allocator.Error || vmm.MapperError
+///     vmm.MapperError.NotMapped - If the region being unmapped wasn't mapped in the first place
 ///
 pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) (std.mem.Allocator.Error || vmm.MapperError)!void {
     var virt_addr = virtual_start;

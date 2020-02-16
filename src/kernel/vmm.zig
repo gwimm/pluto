@@ -68,6 +68,9 @@ pub fn Mapper(comptime Payload: type) type {
         ///     INOUT allocator: std.mem.Allocator - The allocator to use when mapping, if required
         ///     IN spec: Payload - The payload to pass to the mapper
         ///
+        /// Error: std.mem.AllocatorError || MapperError
+        ///     The causes depend on the mapper used
+        ///
         mapFn: fn (virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes, allocator: *std.mem.Allocator, spec: Payload) (std.mem.Allocator.Error || MapperError)!void,
 
         ///
@@ -77,6 +80,9 @@ pub fn Mapper(comptime Payload: type) type {
         ///     IN virtual_start: usize - The start of the virtual region to unmap
         ///     IN virtual_end: usize - The end of the virtual region to unmap
         ///     IN spec: Payload - The payload to pass to the mapper
+        ///
+        /// Error: std.mem.AllocatorError || MapperError
+        ///     The causes depend on the mapper used
         ///
         unmapFn: fn (virtual_start: usize, virtual_end: usize, spec: Payload) (std.mem.Allocator.Error || MapperError)!void,
     };

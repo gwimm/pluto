@@ -10,6 +10,7 @@ const tty = @import("tty.zig");
 const multiboot = @import("multiboot.zig");
 const log = @import("log.zig");
 const panic = @import("panic.zig").panic;
+const arch = @import("arch.zig").internals;
 
 /// Attributes for a virtual memory allocation
 pub const Attributes = struct {
@@ -320,10 +321,10 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
 /// Error: std.mem.Allocator.Error
 ///     std.mem.Allocator.Error.OutOfMemory - The allocator cannot allocate the memory required
 ///
-pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_info_t, allocator: *std.mem.Allocator, comptime Payload: type, mapper: Mapper(Payload), payload: Payload) std.mem.Allocator.Error!VirtualMemoryManager(Payload) {
+pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_info_t, allocator: *std.mem.Allocator) std.mem.Allocator.Error!VirtualMemoryManager(arch.VmmPayload) {
     log.logInfo("Init vmm\n", .{});
 
-    var vmm = try VirtualMemoryManager(Payload).init(0, 0xFFFFFFFF, allocator, mapper, payload);
+    var vmm = try VirtualMemoryManager(arch.VmmPayload).init(0, 0xFFFFFFFF, allocator, arch.VMM_MAPPER, arch.KERNEL_VMM_PAYLOAD);
 
     // Map in kernel
     // Calculate start and end of mapping
@@ -360,7 +361,7 @@ pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_in
 
     log.logInfo("Done\n", .{});
 
-    if (build_options.rt_test) runtimeTests(Payload, vmm, mem_profile, mb_info);
+    if (build_options.rt_test) runtimeTests(arch.VmmPayload, vmm, mem_profile, mb_info);
     return vmm;
 }
 

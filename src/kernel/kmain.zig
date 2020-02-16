@@ -54,7 +54,7 @@ export fn kmain(mb_info: *multiboot.multiboot_info_t, mb_magic: u32) void {
         };
 
         pmm.init(&mem_profile, &fixed_allocator.allocator);
-        kernel_vmm = vmm.init(&mem_profile, mb_info, &fixed_allocator.allocator, arch.VmmPayload, arch.VMM_MAPPER, arch.KERNEL_VMM_PAYLOAD) catch |e| panic_root.panic(@errorReturnTrace(), "Failed to initialise kernel VMM: {}", .{e});
+        kernel_vmm = vmm.init(&mem_profile, mb_info, &fixed_allocator.allocator) catch |e| panic_root.panic(@errorReturnTrace(), "Failed to initialise kernel VMM: {}", .{e});
 
         log.logInfo("Init arch " ++ @tagName(builtin.arch) ++ "\n", .{});
         arch.init(mb_info, &mem_profile, &fixed_allocator.allocator);

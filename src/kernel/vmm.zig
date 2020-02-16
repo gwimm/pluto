@@ -39,6 +39,7 @@ pub const MapperError = error{
     AddressMismatch,
     MisalignedVirtualAddress,
     MisalignedPhysicalAddress,
+    Unmapped,
 };
 
 ///

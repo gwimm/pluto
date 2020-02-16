@@ -326,7 +326,29 @@ pub fn map(virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usiz
 ///     INOUT dir: *Directory - The page directory to unmap within
 ///
 pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) (std.mem.Allocator.Error || vmm.MapperError)!void {
-    // TODO: Implement
+    var virt_addr = virtual_start;
+    var page = virt_addr / PAGE_SIZE_4KB;
+    var entry_idx = virt_addr / PAGE_SIZE_4MB;
+    while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virtual_end) : ({
+        virt_addr += PAGE_SIZE_4MB;
+        entry_idx += 1;
+    }) {
+        var dir_entry = &dir.entries[entry_idx];
+        const table = dir.tables[entry_idx] orelse return vmm.MapperError.Unmapped;
+        const end = std.math.min(virtual_end, virt_addr + PAGE_SIZE_4MB);
+        var addr = virt_addr;
+        while (addr < end) : (addr += PAGE_SIZE_4KB) {
+            var table_entry = &table.entries[virtToTableEntryIdx(addr)];
+            if (table_entry.* & TENTRY_PRESENT != 0) {
+                clearAttribute(table_entry, TENTRY_PRESENT);
+            } else {
+                return vmm.MapperError.Unmapped;
+            }
+        }
+        // If the region to be mapped covers all of this directory entry, set the whole thing as not present
+        if (virtual_end - virt_addr >= PAGE_SIZE_4MB)
+            clearAttribute(dir_entry, DENTRY_PRESENT);
+    }
 }
 
 ///
@@ -363,8 +385,8 @@ pub fn init(mb_info: *multiboot.multiboot_info_t, mem_profile: *const MemProfile
     if (options.rt_test) runtimeTests(v_end);
 }
 
-fn checkDirEntry(entry: DirectoryEntry, virt_start: usize, virt_end: usize, phys_start: usize, attrs: vmm.Attributes, table: *Table) void {
-    expectEqual(entry & DENTRY_PRESENT, DENTRY_PRESENT);
+fn checkDirEntry(entry: DirectoryEntry, virt_start: usize, virt_end: usize, phys_start: usize, attrs: vmm.Attributes, table: *Table, present: bool) void {
+    expectEqual(entry & DENTRY_PRESENT, if (present) DENTRY_PRESENT else 0);
     expectEqual(entry & DENTRY_WRITABLE, if (attrs.writable) DENTRY_WRITABLE else 0);
     expectEqual(entry & DENTRY_USER, if (attrs.kernel) 0 else DENTRY_USER);
     expectEqual(entry & DENTRY_WRITE_THROUGH, DENTRY_WRITE_THROUGH);
@@ -380,12 +402,12 @@ fn checkDirEntry(entry: DirectoryEntry, virt_start: usize, virt_end: usize, phys
         phys += PAGE_SIZE_4KB;
     }) {
         const tentry = table.entries[tentry_idx];
-        checkTableEntry(tentry, phys, attrs);
+        checkTableEntry(tentry, phys, attrs, present);
     }
 }
 
-fn checkTableEntry(entry: TableEntry, page_phys: usize, attrs: vmm.Attributes) void {
-    expect(entry & TENTRY_PRESENT != 0);
+fn checkTableEntry(entry: TableEntry, page_phys: usize, attrs: vmm.Attributes, present: bool) void {
+    expectEqual(entry & TENTRY_PRESENT, if (present) TENTRY_PRESENT else 0);
     expectEqual(entry & TENTRY_WRITABLE, if (attrs.writable) TENTRY_WRITABLE else 0);
     expectEqual(entry & TENTRY_USER, if (attrs.kernel) 0 else TENTRY_USER);
     expectEqual(entry & TENTRY_WRITE_THROUGH, TENTRY_WRITE_THROUGH);
@@ -445,7 +467,7 @@ test "mapDirEntry" {
     const entry_idx = virtToDirEntryIdx(virt);
     const entry = dir.entries[entry_idx];
     const table = dir.tables[entry_idx] orelse unreachable;
-    checkDirEntry(entry, virt, virt_end, phys, .{ .kernel = true, .writable = true, .cachable = true }, table);
+    checkDirEntry(entry, virt, virt_end, phys, .{ .kernel = true, .writable = true, .cachable = true }, table, true);
 }
 
 test "mapDirEntry returns errors correctly" {
@@ -459,7 +481,7 @@ test "mapDirEntry returns errors correctly" {
     testing.expectError(vmm.MapperError.InvalidPhysicalAddress, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, 0, attrs, allocator));
 }
 
-test "mapDir" {
+test "map and unmap" {
     var allocator = std.heap.direct_allocator;
     var dir = Directory{ .entries = [_]DirectoryEntry{0} ** ENTRIES_PER_DIRECTORY, .tables = [_]?*Table{null} ** ENTRIES_PER_DIRECTORY };
     const phys_start: usize = PAGE_SIZE_4MB * 2;
@@ -478,7 +500,20 @@ test "mapDir" {
         const entry_idx = virtToDirEntryIdx(virt);
         const entry = dir.entries[entry_idx];
         const table = dir.tables[entry_idx] orelse unreachable;
-        checkDirEntry(entry, virt, virt + PAGE_SIZE_4MB, phys, attrs, table);
+        checkDirEntry(entry, virt, virt + PAGE_SIZE_4MB, phys, attrs, table, true);
+    }
+
+    unmap(virt_start, virt_end, &dir) catch unreachable;
+    virt = virt_start;
+    phys = phys_start;
+    while (virt < virt_end) : ({
+        virt += PAGE_SIZE_4MB;
+        phys += PAGE_SIZE_4MB;
+    }) {
+        const entry_idx = virtToDirEntryIdx(virt);
+        const entry = dir.entries[entry_idx];
+        const table = dir.tables[entry_idx] orelse unreachable;
+        checkDirEntry(entry, virt, virt + PAGE_SIZE_4MB, phys, attrs, table, false);
     }
 }
 

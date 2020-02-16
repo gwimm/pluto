@@ -29,24 +29,6 @@ const Table = packed struct {
     entries: [ENTRIES_PER_TABLE]TableEntry,
 };
 
-/// All errors that can be thrown by paging functions.
-const PagingError = error{
-    /// Physical addresses are invalid (definition is up to the function).
-    InvalidPhysAddresses,
-
-    /// Virtual addresses are invalid (definition is up to the function).
-    InvalidVirtAddresses,
-
-    /// Physical and virtual addresses don't cover spaces of the same size.
-    PhysicalVirtualMismatch,
-
-    /// Physical addresses aren't aligned by page size.
-    UnalignedPhysAddresses,
-
-    /// Virtual addresses aren't aligned by page size.
-    UnalignedVirtAddresses,
-};
-
 /// An entry within a directory. References a single page table.
 /// Bit 0: Present. Set if present in physical memory.
 ///        When not set, all remaining 31 bits are ignored and available for use.
@@ -178,42 +160,42 @@ inline fn clearAttribute(val: *align(1) u32, attr: u32) void {
 /// Clears the user and cache disabled bits. Entry should be zero'ed.
 ///
 /// Arguments:
-///     OUT dir: *Directory - The directory that this entry is in
 ///     IN virt_addr: usize - The start of the virtual space to map
 ///     IN virt_end: usize - The end of the virtual space to map
 ///     IN phys_addr: usize - The start of the physical space to map
 ///     IN phys_end: usize - The end of the physical space to map
 ///     IN attrs: vmm.Attributes - The attributes to apply to this mapping
 ///     IN allocator: *Allocator - The allocator to use to map any tables needed
+///     OUT dir: *Directory - The directory that this entry is in
 ///
-/// Error: PagingError || std.mem.Allocator.Error
-///     PagingError.InvalidPhysAddresses - The physical start address is greater than the end.
-///     PagingError.InvalidVirtAddresses - The virtual start address is greater than the end or is larger than 4GB.
-///     PagingError.PhysicalVirtualMismatch - The differences between the virtual addresses and the physical addresses aren't the same.
-///     PagingError.UnalignedPhysAddresses - One or both of the physical addresses aren't page size aligned.
-///     PagingError.UnalignedVirtAddresses - One or both of the virtual addresses aren't page size aligned.
-///     std.mem.Allocator.Error.* - See std.mem.Allocator.alignedAlloc.
+/// Error: vmm.MapperError || std.mem.Allocator.Error
+///     vmm.MapperError.InvalidPhysicalAddress - The physical start address is greater than the end
+///     vmm.MapperError.InvalidVirtualAddress - The virtual start address is greater than the end or is larger than 4GB
+///     vmm.MapperError.AddressMismatch - The differences between the virtual addresses and the physical addresses aren't the same
+///     vmm.MapperError.MisalignedPhysicalAddress - One or both of the physical addresses aren't page size aligned
+///     vmm.MapperError.MisalignedVirtualAddress - One or both of the virtual addresses aren't page size aligned
+///     std.mem.Allocator.Error.* - See std.mem.Allocator.alignedAlloc
 ///
-fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator) (PagingError || std.mem.Allocator.Error)!void {
+fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator) (vmm.MapperError || std.mem.Allocator.Error)!void {
     if (phys_start > phys_end) {
-        return PagingError.InvalidPhysAddresses;
+        return vmm.MapperError.InvalidPhysicalAddress;
     }
     if (virt_start > virt_end) {
-        return PagingError.InvalidVirtAddresses;
+        return vmm.MapperError.InvalidVirtualAddress;
     }
     if (phys_end - phys_start != virt_end - virt_start) {
-        return PagingError.PhysicalVirtualMismatch;
+        return vmm.MapperError.AddressMismatch;
     }
     if (!std.mem.isAligned(phys_start, PAGE_SIZE_4KB) or !std.mem.isAligned(phys_end, PAGE_SIZE_4KB)) {
-        return PagingError.UnalignedPhysAddresses;
+        return vmm.MapperError.MisalignedPhysicalAddress;
     }
     if (!std.mem.isAligned(virt_start, PAGE_SIZE_4KB) or !std.mem.isAligned(virt_end, PAGE_SIZE_4KB)) {
-        return PagingError.UnalignedVirtAddresses;
+        return vmm.MapperError.MisalignedVirtualAddress;
     }
 
     const entry = virt_start / PAGE_SIZE_4MB;
     if (entry >= ENTRIES_PER_DIRECTORY)
-        return PagingError.InvalidVirtAddresses;
+        return vmm.MapperError.InvalidVirtualAddress;
     var dir_entry = &dir.entries[entry];
 
     setAttribute(dir_entry, DENTRY_PRESENT);
@@ -276,9 +258,9 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
 /// Error: PagingError
 ///     PagingError.UnalignedPhysAddresses - If the physical address isn't page size aligned.
 ///
-fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize, attrs: vmm.Attributes) PagingError!void {
+fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize, attrs: vmm.Attributes) vmm.MapperError!void {
     if (!std.mem.isAligned(phys_addr, PAGE_SIZE_4KB)) {
-        return PagingError.UnalignedPhysAddresses;
+        return vmm.MapperError.MisalignedPhysicalAddress;
     }
     setAttribute(entry, TENTRY_PRESENT);
     if (attrs.writable) {
@@ -306,45 +288,6 @@ fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize, attrs: vmm.Attri
 }
 
 ///
-/// Map a page directory. The addresses passed must be page size aligned and be the same distance apart.
-///
-/// Arguments:
-///     OUT entry: *Directory - The directory to map
-///     IN virt_start: usize - The virtual address at which to start mapping
-///     IN virt_end: usize - The virtual address at which to stop mapping
-///     IN phys_start: usize - The physical address at which to start mapping
-///     IN phys_end: usize - The physical address at which to stop mapping
-///     IN attrs: vmm.Attributes - The attributes to apply to this mapping
-///     IN allocator: *Allocator - The allocator to use to map any tables needed
-///
-/// Error: std.mem.Allocator.Error || PagingError
-///     * - See mapDirEntry.
-///
-fn mapDir(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator) (std.mem.Allocator.Error || PagingError)!void {
-    var virt_addr = virt_start;
-    var phys_addr = phys_start;
-    var page = virt_addr / PAGE_SIZE_4KB;
-    var entry_idx = virt_addr / PAGE_SIZE_4MB;
-    while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virt_end) : ({
-        phys_addr += PAGE_SIZE_4MB;
-        virt_addr += PAGE_SIZE_4MB;
-        entry_idx += 1;
-    }) {
-        try mapDirEntry(dir, virt_addr, std.math.min(virt_end, virt_addr + PAGE_SIZE_4MB), phys_addr, std.math.min(phys_end, phys_addr + PAGE_SIZE_4MB), attrs, allocator);
-    }
-}
-
-///
-/// Called when a page fault occurs.
-///
-/// Arguments:
-///     IN state: *arch.InterruptContext - The CPU's state when the fault occurred.
-///
-fn pageFault(state: *arch.InterruptContext) void {
-    @panic("Page fault");
-}
-
-///
 /// Map a virtual region of memory to a physical region with a set of attributes within a directory.
 /// If this call is made to a directory that has been loaded by the CPU, the virtual memory will immediately be accessible (given the proper attributes)
 /// and will be mirrored to the physical region given. Otherwise it will be accessible once the given directory is loaded by the CPU.
@@ -360,8 +303,18 @@ fn pageFault(state: *arch.InterruptContext) void {
 ///     INOUT allocator: *std.mem.Allocator - The allocator to use to allocate any intermediate data structures required to map this region
 ///     INOUT dir: *Directory - The page directory to map within
 ///
-pub fn map(virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator, dir: *Directory) void {
-    mapDir(dir, virtual_start, virtual_end, physical_start, physical_end, attrs, allocator) catch |e| panic(@errorReturnTrace(), "Failed to map virtual {x} -> {x} to physical {x} -> {x}: {}", .{ virtual_start, virtual_end, physical_start, physical_end, e });
+pub fn map(virt_start: usize, virt_end: usize, phys_start: usize, phys_end: usize, attrs: vmm.Attributes, allocator: *std.mem.Allocator, dir: *Directory) (std.mem.Allocator.Error || vmm.MapperError)!void {
+    var virt_addr = virt_start;
+    var phys_addr = phys_start;
+    var page = virt_addr / PAGE_SIZE_4KB;
+    var entry_idx = virt_addr / PAGE_SIZE_4MB;
+    while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virt_end) : ({
+        phys_addr += PAGE_SIZE_4MB;
+        virt_addr += PAGE_SIZE_4MB;
+        entry_idx += 1;
+    }) {
+        try mapDirEntry(dir, virt_addr, std.math.min(virt_end, virt_addr + PAGE_SIZE_4MB), phys_addr, std.math.min(phys_end, phys_addr + PAGE_SIZE_4MB), attrs, allocator);
+    }
 }
 
 ///
@@ -372,8 +325,18 @@ pub fn map(virtual_start: usize, virtual_end: usize, physical_start: usize, phys
 ///     IN virtual_end: usize - The end (exclusive) of the virtual region to unmap
 ///     INOUT dir: *Directory - The page directory to unmap within
 ///
-pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) void {
+pub fn unmap(virtual_start: usize, virtual_end: usize, dir: *Directory) (std.mem.Allocator.Error || vmm.MapperError)!void {
     // TODO: Implement
+}
+
+///
+/// Called when a page fault occurs.
+///
+/// Arguments:
+///     IN state: *arch.InterruptContext - The CPU's state when the fault occurred.
+///
+fn pageFault(state: *arch.InterruptContext) void {
+    @panic("Page fault");
 }
 
 ///
@@ -489,11 +452,11 @@ test "mapDirEntry returns errors correctly" {
     var allocator = std.heap.direct_allocator;
     var dir = Directory{ .entries = [_]DirectoryEntry{0} ** ENTRIES_PER_DIRECTORY, .tables = undefined };
     const attrs = vmm.Attributes{ .kernel = true, .writable = true, .cachable = true };
-    testing.expectError(PagingError.UnalignedVirtAddresses, mapDirEntry(&dir, 1, PAGE_SIZE_4KB + 1, 0, PAGE_SIZE_4KB, attrs, allocator));
-    testing.expectError(PagingError.UnalignedPhysAddresses, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, PAGE_SIZE_4KB + 1, attrs, allocator));
-    testing.expectError(PagingError.PhysicalVirtualMismatch, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, PAGE_SIZE_4KB, attrs, allocator));
-    testing.expectError(PagingError.InvalidVirtAddresses, mapDirEntry(&dir, 1, 0, 0, PAGE_SIZE_4KB, attrs, allocator));
-    testing.expectError(PagingError.InvalidPhysAddresses, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, 0, attrs, allocator));
+    testing.expectError(vmm.MapperError.MisalignedVirtualAddress, mapDirEntry(&dir, 1, PAGE_SIZE_4KB + 1, 0, PAGE_SIZE_4KB, attrs, allocator));
+    testing.expectError(vmm.MapperError.MisalignedPhysicalAddress, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, PAGE_SIZE_4KB + 1, attrs, allocator));
+    testing.expectError(vmm.MapperError.AddressMismatch, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, PAGE_SIZE_4KB, attrs, allocator));
+    testing.expectError(vmm.MapperError.InvalidVirtualAddress, mapDirEntry(&dir, 1, 0, 0, PAGE_SIZE_4KB, attrs, allocator));
+    testing.expectError(vmm.MapperError.InvalidPhysicalAddress, mapDirEntry(&dir, 0, PAGE_SIZE_4KB, 1, 0, attrs, allocator));
 }
 
 test "mapDir" {
@@ -504,7 +467,7 @@ test "mapDir" {
     const phys_end: usize = PAGE_SIZE_4MB * 4;
     const virt_end: usize = PAGE_SIZE_4MB * 6;
     const attrs = vmm.Attributes{ .kernel = true, .writable = true, .cachable = true };
-    mapDir(&dir, virt_start, virt_end, phys_start, phys_end, attrs, allocator) catch unreachable;
+    map(virt_start, virt_end, phys_start, phys_end, attrs, allocator, &dir) catch unreachable;
 
     var virt = virt_start;
     var phys = phys_start;

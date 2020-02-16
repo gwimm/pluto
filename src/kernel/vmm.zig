@@ -33,6 +33,14 @@ const Allocation = struct {
 /// The size of each allocatable block, the same as the physical memory manager's block size
 pub const BLOCK_SIZE: u32 = pmm.BLOCK_SIZE;
 
+pub const MapperError = error{
+    InvalidVirtualAddress,
+    InvalidPhysicalAddress,
+    AddressMismatch,
+    MisalignedVirtualAddress,
+    MisalignedPhysicalAddress,
+};
+
 ///
 /// Returns a container that can map and unmap virtual memory to physical memory.
 /// The mapper can pass some payload data when mapping an unmapping, which is of type `Payload`. This can be anything that the underlying mapper needs to carry out the mapping process.
@@ -59,7 +67,7 @@ pub fn Mapper(comptime Payload: type) type {
         ///     INOUT allocator: std.mem.Allocator - The allocator to use when mapping, if required
         ///     IN spec: Payload - The payload to pass to the mapper
         ///
-        mapFn: fn (virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes, allocator: *std.mem.Allocator, spec: Payload) void,
+        mapFn: fn (virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes, allocator: *std.mem.Allocator, spec: Payload) (std.mem.Allocator.Error || MapperError)!void,
 
         ///
         /// Unmap a region (can span more than one block) of virtual memory from its physical memory. After a call to this function, the memory should not be accesible without error.
@@ -69,7 +77,7 @@ pub fn Mapper(comptime Payload: type) type {
         ///     IN virtual_end: usize - The end of the virtual region to unmap
         ///     IN spec: Payload - The payload to pass to the mapper
         ///
-        unmapFn: fn (virtual_start: usize, virtual_end: usize, spec: Payload) void,
+        unmapFn: fn (virtual_start: usize, virtual_end: usize, spec: Payload) (std.mem.Allocator.Error || MapperError)!void,
     };
 }
 
@@ -186,7 +194,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///     IN physical_end: usize - The end of the physical region
         ///     IN attrs: Attributes - The attributes to apply to the memory regions
         ///
-        /// Error: VmmError || Bitmap(u32).BitmapError
+        /// Error: VmmError || Bitmap(u32).BitmapError || std.mem.Allocator.Error || MapperError
         ///     VmmError.AlreadyAllocated - The virtual address has arlready been allocated
         ///     VmmError.PhysicalAlreadyAllocated - The physical address has already been allocated
         ///     VmmError.PhysicalVirtualMismatch - The physical region and virtual region are of different sizes
@@ -194,8 +202,9 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///     VmmError.InvalidPhysicalAddresses - The start physical address is greater than the end address
         ///     Bitmap.BitmapError.OutOfBounds - The physical or virtual addresses are out of bounds
         ///     std.mem.Allocator.Error.OutOfMemory - Allocating the required memory failed
+        ///     MapperError.* - The causes depend on the mapper used
         ///
-        pub fn set(self: *Self, virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes) (VmmError || bitmap.Bitmap(u32).BitmapError || std.mem.Allocator.Error)!void {
+        pub fn set(self: *Self, virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes) (VmmError || bitmap.Bitmap(u32).BitmapError || std.mem.Allocator.Error || MapperError)!void {
             var virt = virtual_start;
             while (virt < virtual_end) : (virt += BLOCK_SIZE) {
                 if (try self.isSet(virt))
@@ -218,7 +227,7 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 try self.bmp.setEntry(virt / BLOCK_SIZE);
             }
 
-            self.mapper.mapFn(virtual_start, virtual_end, physical_start, physical_end, attrs, self.allocator, self.payload);
+            try self.mapper.mapFn(virtual_start, virtual_end, physical_start, physical_end, attrs, self.allocator, self.payload);
 
             var phys_list = std.ArrayList(usize).init(self.allocator);
             phys = physical_start;
@@ -264,7 +273,8 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                         if (i == 0)
                             first_addr = addr;
                         try block_list.append(addr);
-                        self.mapper.mapFn(vaddr, vaddr + BLOCK_SIZE, addr, addr + BLOCK_SIZE, attrs, self.allocator, self.payload);
+                        // The map function failing isn't the caller's responsibility so panic as it shouldn't happen
+                        self.mapper.mapFn(vaddr, vaddr + BLOCK_SIZE, addr, addr + BLOCK_SIZE, attrs, self.allocator, self.payload) catch |e| panic(@errorReturnTrace(), "Failed to map virtual memory: {}\n", .{e});
                         vaddr += BLOCK_SIZE;
                     }
                     _ = try self.allocations.put(vaddr_start, Allocation{ .physical = block_list });
@@ -489,7 +499,7 @@ fn testInit(num_entries: u32) std.mem.Allocator.Error!VirtualMemoryManager(u8) {
 ///     INOUT allocator: *std.mem.Allocator - The allocator to use. Ignored
 ///     IN payload: u8 - The payload value. Expected to be 39
 ///
-fn testMap(vstart: usize, vend: usize, pstart: usize, pend: usize, attrs: Attributes, allocator: *std.mem.Allocator, payload: u8) void {
+fn testMap(vstart: usize, vend: usize, pstart: usize, pend: usize, attrs: Attributes, allocator: *std.mem.Allocator, payload: u8) (std.mem.Allocator.Error || MapperError)!void {
     std.testing.expectEqual(@as(u8, 39), payload);
     var vaddr = vstart;
     while (vaddr < vend) : (vaddr += BLOCK_SIZE) {
@@ -505,7 +515,7 @@ fn testMap(vstart: usize, vend: usize, pstart: usize, pend: usize, attrs: Attrib
 ///     IN vend: usize - The end of the virtual region to unmap
 ///     IN payload: u8 - The payload value. Expected to be 39
 ///
-fn testUnmap(vstart: usize, vend: usize, payload: u8) void {
+fn testUnmap(vstart: usize, vend: usize, payload: u8) (std.mem.Allocator.Error || MapperError)!void {
     std.testing.expectEqual(@as(u8, 39), payload);
     var vaddr = vstart;
     while (vaddr < vend) : (vaddr += BLOCK_SIZE) {

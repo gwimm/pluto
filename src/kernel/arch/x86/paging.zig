@@ -261,7 +261,7 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
         phys += PAGE_SIZE_4KB;
         tentry += 1;
     }) {
-        try mapTableEntry(&table.entries[tentry], phys);
+        try mapTableEntry(&table.entries[tentry], phys, attrs);
     }
 }
 
@@ -276,17 +276,33 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
 /// Error: PagingError
 ///     PagingError.UnalignedPhysAddresses - If the physical address isn't page size aligned.
 ///
-fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize) PagingError!void {
+fn mapTableEntry(entry: *align(1) TableEntry, phys_addr: usize, attrs: vmm.Attributes) PagingError!void {
     if (!std.mem.isAligned(phys_addr, PAGE_SIZE_4KB)) {
         return PagingError.UnalignedPhysAddresses;
     }
-    entry.* |= TENTRY_PRESENT;
-    entry.* |= TENTRY_WRITABLE;
-    entry.* &= ~TENTRY_USER;
-    entry.* |= TENTRY_WRITE_THROUGH;
-    entry.* &= ~TENTRY_CACHE_DISABLED;
-    entry.* &= ~TENTRY_GLOBAL;
-    entry.* |= TENTRY_PAGE_ADDR & phys_addr;
+    setAttribute(entry, TENTRY_PRESENT);
+    if (attrs.writable) {
+        setAttribute(entry, TENTRY_WRITABLE);
+    } else {
+        clearAttribute(entry, TENTRY_WRITABLE);
+    }
+    if (attrs.kernel) {
+        clearAttribute(entry, TENTRY_USER);
+    } else {
+        setAttribute(entry, TENTRY_USER);
+    }
+    if (attrs.writable) {
+        setAttribute(entry, TENTRY_WRITE_THROUGH);
+    } else {
+        clearAttribute(entry, TENTRY_WRITE_THROUGH);
+    }
+    if (attrs.cachable) {
+        clearAttribute(entry, TENTRY_CACHE_DISABLED);
+    } else {
+        setAttribute(entry, TENTRY_CACHE_DISABLED);
+    }
+    clearAttribute(entry, TENTRY_GLOBAL);
+    setAttribute(entry, TENTRY_PAGE_ADDR & phys_addr);
 }
 
 ///

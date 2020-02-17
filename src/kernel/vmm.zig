@@ -267,7 +267,6 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
                 // The virtual address space must be contiguous
                 if (self.bmp.setContiguous(num)) |entry| {
                     var block_list = std.ArrayList(usize).init(self.allocator);
-                    defer block_list.deinit();
                     try block_list.ensureCapacity(num);
 
                     var i: u32 = 0;
@@ -302,21 +301,28 @@ pub fn VirtualMemoryManager(comptime Payload: type) type {
         ///     VmmError.NotAllocated - This address hasn't been allocated yet
         ///     Bitmap.BitmapError.OutOfBounds - The address is out of the manager's bounds
         ///
-        pub fn free(self: *Self, vaddr: usize) (VmmBitmap.BitmapError || VmmError)!void {
+        pub fn free(self: *Self, vaddr: usize) (bitmap.Bitmap(u32).BitmapError || VmmError)!void {
             const entry = vaddr / BLOCK_SIZE;
             if (try self.bmp.isSet(entry)) {
                 // There will be an allocation associated with this virtual address
                 const allocation = self.allocations.get(vaddr) orelse unreachable;
-                for (allocations.physical) |block, i| {
+                const physical = allocation.value.physical;
+                defer physical.deinit();
+                const num_physical_allocations = physical.len;
+                for (physical.toSlice()) |block, i| {
                     // Clear the address space entry, unmap the virtual memory and free the physical memory
                     try self.bmp.clearEntry(entry + i);
-                    self.mapper.unmapFn(vaddr + i * BLOCK_SIZE);
-                    pmm.free(block);
+                    pmm.free(block) catch |e| panic(@errorReturnTrace(), "Failed to free PMM reserved memory at {x}: {}\n", .{ block * BLOCK_SIZE, e });
                 }
+                // Unmap the entire range
+                const region_start = entry * BLOCK_SIZE;
+                const region_end = (entry + num_physical_allocations) * BLOCK_SIZE;
+                self.mapper.unmapFn(region_start, region_end, self.payload) catch |e| panic(@errorReturnTrace(), "Failed to unmap VMM reserved memory from {x} to {x}: {}\n", .{ region_start, region_end, e });
                 // The allocation is freed so remove from the map
                 self.allocations.removeAssertDiscard(vaddr);
+            } else {
+                return VmmError.NotAllocated;
             }
-            return VmmError.NotAllocated;
         }
     };
 }
@@ -382,10 +388,12 @@ pub fn init(mem_profile: *const mem.MemProfile, mb_info: *multiboot.multiboot_in
     return vmm;
 }
 
-test "alloc" {
+test "alloc and free" {
     const num_entries = 512;
     var vmm = try testInit(num_entries);
     var allocations = test_allocations orelse unreachable;
+    var virtual_allocations = std.ArrayList(usize).init(std.testing.allocator);
+    defer virtual_allocations.deinit();
 
     var entry: u32 = 0;
     while (entry < num_entries) {
@@ -402,6 +410,7 @@ test "alloc" {
         } else {
             // Else it should have succedded and allocated the correct address
             std.testing.expectEqual(@as(?usize, entry * BLOCK_SIZE), result);
+            try virtual_allocations.append(result orelse unreachable);
         }
 
         // Make sure that the entries are set or not depending on the allocation success
@@ -433,6 +442,29 @@ test "alloc" {
         while (later_entry < num_entries) : (later_entry += 1) {
             std.testing.expect(!(try vmm.isSet(later_entry * BLOCK_SIZE)));
             std.testing.expect(!(try pmm.isSet(later_entry * BLOCK_SIZE)));
+        }
+    }
+
+    // Try freeing all allocations
+    for (virtual_allocations.toSlice()) |alloc| {
+        const alloc_group = vmm.allocations.get(alloc);
+        std.testing.expect(alloc_group != null);
+        const physical = alloc_group.?.value.physical;
+        // We need to create a copy of the physical allocations since the free call deinits them
+        var physical_copy = std.ArrayList(usize).init(std.testing.allocator);
+        defer physical_copy.deinit();
+        // Make sure they are all reserved in the PMM
+        for (physical.toSlice()) |phys| {
+            std.testing.expect(try pmm.isSet(phys));
+            try physical_copy.append(phys);
+        }
+        vmm.free(alloc) catch unreachable;
+        // This virtual allocation should no longer be in the hashmap
+        std.testing.expectEqual(vmm.allocations.get(alloc), null);
+        std.testing.expect(!try vmm.isSet(alloc));
+        // And all its physical blocks should now be free
+        for (physical_copy.toSlice()) |phys| {
+            std.testing.expect(!try pmm.isSet(phys));
         }
     }
 }
